@@ -1,0 +1,65 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: guac-db-init
+  namespace: remote-access
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      volumes:
+        - name: schema
+          emptyDir: {}
+      containers:
+        - name: export-schema
+          image: guacamole/guacamole:1.5.5
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - -lc
+            - |
+              set -euo pipefail
+              if [ -x /opt/guacamole/bin/initdb.sh ]; then
+                /opt/guacamole/bin/initdb.sh --postgresql > /schema/initdb.sql
+              else
+                cat /opt/guacamole/postgresql/*.sql > /schema/initdb.sql
+              fi
+          volumeMounts:
+            - name: schema
+              mountPath: /schema
+        - name: apply-schema
+          image: postgres:15-alpine
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: guac-db-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: guac-db-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: guac-db-secrets
+                  key: POSTGRES_DB
+          command:
+            - /bin/sh
+            - -lc
+            - |
+              set -euo pipefail
+              until pg_isready -h guac-postgres -U "$POSTGRES_USER" >/dev/null 2>&1; do
+                echo "Waiting for Postgres..."; sleep 3;
+              done
+              until [ -s /schema/initdb.sql ]; do echo "Waiting for schema..."; sleep 1; done
+              export PGPASSWORD="$POSTGRES_PASSWORD"
+              # Apply schema; ignore re-run errors for idempotency
+              psql -h guac-postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=0 -f /schema/initdb.sql
+          volumeMounts:
+            - name: schema
+              mountPath: /schema
+

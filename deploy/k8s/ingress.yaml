@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: guacamole
+  namespace: remote-access
+  annotations:
+    # Set to your cluster issuer if using cert-manager
+    # cert-manager.io/cluster-issuer: letsencrypt-prod-guacamole
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: remote.alfaclouds.com
+      http:
+        paths:
+          - path: /guacamole
+            pathType: Prefix
+            backend:
+              service:
+                name: guacamole
+                port:
+                  number: 8080
+  # Uncomment for TLS if cert-manager or TLS termination is configured
+  # tls:
+  #   - hosts:
+  #       - remote.alfaclouds.com
+  #     secretName: guacamole-tls
