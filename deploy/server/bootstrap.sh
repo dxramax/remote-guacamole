@@ -66,5 +66,29 @@ kubectl -n ${NS} delete job guac-bootstrap-connection --ignore-not-found
 
 echo "[remote] Status:"
 kubectl -n ${NS} get pods,svc,ingress
-echo "[remote] Done."
 
+echo "[remote] Waiting for guacd and guacamole deployments to be ready"
+kubectl -n ${NS} rollout status deploy/guacd --timeout=120s || true
+kubectl -n ${NS} rollout status deploy/guacamole --timeout=120s || true
+
+echo "[remote] Sanity check: Ingress reachability"
+HOST=$(kubectl -n ${NS} get ingress guacamole -o jsonpath='{.spec.rules[0].host}' 2>/dev/null || echo "remote.alfaclouds.com")
+NGINX_NS=${NGINX_NS:-ingress-nginx}
+NODEPORT_TLS=$(kubectl -n "$NGINX_NS" get svc -o jsonpath='{.items[?(@.metadata.labels.app\u002ekubernetes\u002eio/name=="ingress-nginx")].spec.ports[?(@.port==443)].nodePort}' 2>/dev/null || true)
+if [ -n "$NODEPORT_TLS" ]; then
+  echo "[remote] Curl https via NodePort 443 ($NODEPORT_TLS)"
+  curl -skI -H "Host: ${HOST}" "https://127.0.0.1:${NODEPORT_TLS}/guacamole/" || true
+else
+  echo "[remote] Curl https to node external IP (if reachable)"
+  NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || echo "127.0.0.1")
+  curl -skI -H "Host: ${HOST}" "https://${NODE_IP}/guacamole/" || true
+fi
+
+echo "[remote] Sanity check: reverse tunnel local port inside guacd"
+POD=$(kubectl -n ${NS} get pod -l app=guacd -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+if [ -n "$POD" ]; then
+  kubectl -n ${NS} exec "$POD" -c ssh-tunnel -- sh -lc "apk add --no-cache busybox-extras >/dev/null 2>&1 || true; nc -zv 127.0.0.1 13389 >/dev/null 2>&1 && echo '[remote] guacd sidecar: 127.0.0.1:13389 is open' || echo '[remote] guacd sidecar: 127.0.0.1:13389 not open (start local tunnel)'" || true
+fi
+
+echo "READY: Open https://${HOST}/guacamole/ and use connection 'Windows-Workstation'"
+echo "[remote] Done."
