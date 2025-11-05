@@ -25,3 +25,23 @@ Security Notes
 Quick Start
 - See deploy/README.md for step-by-step server and client instructions.
 
+Operations Checklist
+- Server (Kubernetes)
+  - kubectl: apply namespace, secrets, Postgres, guacd+tunnel, guacamole, ingress per deploy/README.md
+  - Root redirect (optional) for / -> /guacamole
+  - Verify ingresses route via existing nginx ingressclass
+- Workstation (Windows)
+  - Enable RDP: deploy/windows/enable-rdp.ps1
+  - Start reverse SSH tunnel (preferred): deploy/windows/run-ssh-reverse.ps1 [-Persist]
+  - If SSH is blocked, start HTTPS tunnel: deploy/windows/run-remote-access.ps1 [-Persist]
+  - If auth issues, temporarily relax RDP: deploy/windows/relax-rdp.ps1
+  - (Optional) Create a local RDP user for testing: deploy/windows/create-local-rdp-user.ps1
+- Guacamole
+  - URL: https://remote.alfaclouds.com/guacamole/
+  - Default admin: guacadmin / guacadmin (change on first login)
+  - Connection: Windows-Workstation points to 127.0.0.1:13389 (via reverse tunnel)
+- Hardening follow-up
+  - Re-enable NLA on the workstation; in Guacamole, set security to nla
+  - Rotate DB and SSH/chisel secrets; restrict egress via NetworkPolicy
+  - Optionally store per-connection credentials in Guacamole
+
