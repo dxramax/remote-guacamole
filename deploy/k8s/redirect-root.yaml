@@ -1,0 +1,32 @@
+apiVersion: traefik.containo.us/v1alpha1
+kind: Middleware
+metadata:
+  name: root-redirect
+  namespace: remote-access
+spec:
+  redirectRegex:
+    regex: ^https?://([^/]+)/?$ 
+    replacement: https://$1/guacamole/
+    permanent: true
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: guacamole-root-redirect
+  namespace: remote-access
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: remote-access-root-redirect@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: remote.alfaclouds.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: guacamole
+                port:
+                  number: 8080
+

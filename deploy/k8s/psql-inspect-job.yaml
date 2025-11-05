@@ -1,0 +1,41 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: guac-psql-inspect
+  namespace: remote-access
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: psql
+          image: postgres:15-alpine
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: guac-db-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: guac-db-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: guac-db-secrets
+                  key: POSTGRES_DB
+          command:
+            - /bin/sh
+            - -lc
+            - |
+              set -euo pipefail
+              export PGPASSWORD="$POSTGRES_PASSWORD"
+              until pg_isready -h guac-postgres -U "$POSTGRES_USER" >/dev/null 2>&1; do sleep 2; done
+              echo '[inspect] guacamole_user columns:'
+              psql -h guac-postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "select column_name from information_schema.columns where table_name='guacamole_user' order by ordinal_position;"
+              echo '[inspect] guacamole_connection_permission columns:'
+              psql -h guac-postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "select column_name from information_schema.columns where table_name='guacamole_connection_permission' order by ordinal_position;"
+

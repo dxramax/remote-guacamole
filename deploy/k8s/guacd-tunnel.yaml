@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: guacd
+  namespace: remote-access
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: guacd
+  template:
+    metadata:
+      labels:
+        app: guacd
+    spec:
+      volumes:
+        - name: ssh-key
+          secret:
+            secretName: contabo-ssh
+            defaultMode: 0400
+            items:
+              - key: id_ed25519
+                path: id_ed25519
+        - name: known-hosts
+          emptyDir: {}
+      containers:
+        - name: guacd
+          image: guacamole/guacd:1.5.5
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: guacd
+              containerPort: 4822
+        - name: ssh-tunnel
+          image: alpine:3.19
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SSH_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: contabo-ssh
+                  key: ssh_host
+            - name: SSH_USER
+              valueFrom:
+                secretKeyRef:
+                  name: contabo-ssh
+                  key: ssh_user
+          volumeMounts:
+            - name: ssh-key
+              mountPath: /keys
+              readOnly: true
+            - name: known-hosts
+              mountPath: /known_hosts
+          command:
+            - /bin/sh
+            - -lc
+            - |
+              set -euo pipefail
+              apk add --no-cache openssh-client >/dev/null
+              while true; do
+                echo "[ssh-tunnel] connecting to ${SSH_USER}@${SSH_HOST}"
+                ssh -NT \
+                  -i /keys/id_ed25519 \
+                  -o StrictHostKeyChecking=accept-new \
+                  -o UserKnownHostsFile=/known_hosts/known_hosts \
+                  -o ServerAliveInterval=30 \
+                  -o ServerAliveCountMax=3 \
+                  -L 127.0.0.1:13389:127.0.0.1:13389 \
+                  ${SSH_USER}@${SSH_HOST} || true
+                echo "[ssh-tunnel] ssh exited; retrying in 5s"
+                sleep 5
+              done
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: guacd
+  namespace: remote-access
+spec:
+  type: ClusterIP
+  selector:
+    app: guacd
+  ports:
+    - name: guacd
+      port: 4822
+      targetPort: guacd
+

@@ -1,0 +1,72 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: guac-bootstrap-connection
+  namespace: remote-access
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: create-conn
+          image: postgres:15-alpine
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: guac-db-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: guac-db-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: guac-db-secrets
+                  key: POSTGRES_DB
+          command:
+            - /bin/sh
+            - -lc
+            - |
+              set -euo pipefail
+              export PGPASSWORD="$POSTGRES_PASSWORD"
+              until pg_isready -h guac-postgres -U "$POSTGRES_USER" >/dev/null 2>&1; do
+                echo "Waiting for Postgres..."; sleep 3;
+              done
+              psql -v ON_ERROR_STOP=1 -h guac-postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\
+                WITH ins AS ( \
+                  INSERT INTO guacamole_connection (connection_name, protocol) \
+                  SELECT 'Windows-Workstation','rdp' \
+                  WHERE NOT EXISTS (SELECT 1 FROM guacamole_connection WHERE connection_name='Windows-Workstation') \
+                  RETURNING connection_id \
+                ) \
+                SELECT 1;"
+              psql -v ON_ERROR_STOP=1 -h guac-postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\
+                WITH cid AS (SELECT connection_id FROM guacamole_connection WHERE connection_name='Windows-Workstation') \
+                DELETE FROM guacamole_connection_parameter WHERE connection_id IN (SELECT connection_id FROM cid) AND parameter_name IN ('hostname','port'); \
+                INSERT INTO guacamole_connection_parameter (connection_id, parameter_name, parameter_value) \
+                SELECT connection_id, p, v FROM (SELECT connection_id FROM cid) x, (VALUES \
+                  ('hostname','127.0.0.1'), \
+                  ('port','13389'), \
+                  ('ignore-cert','true'), \
+                  ('security','any'), \
+                  ('enable-wallpaper','false'), \
+                  ('enable-theming','false'), \
+                  ('create-drive-path','false') \
+                ) AS params(p,v) \
+                ON CONFLICT DO NOTHING;"
+              psql -v ON_ERROR_STOP=1 -h guac-postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\
+                WITH eid AS (SELECT entity_id FROM guacamole_entity WHERE name='guacadmin' AND type='USER'), \
+                     cid AS (SELECT connection_id FROM guacamole_connection WHERE connection_name='Windows-Workstation') \
+                INSERT INTO guacamole_connection_permission (entity_id, connection_id, permission) \
+                SELECT (SELECT entity_id FROM eid), (SELECT connection_id FROM cid), CAST(perms.p AS guacamole_object_permission_type) \
+                FROM (VALUES ('READ'),('UPDATE'),('ADMINISTER')) AS perms(p) \
+                WHERE NOT EXISTS ( \
+                  SELECT 1 FROM guacamole_connection_permission \
+                  WHERE entity_id=(SELECT entity_id FROM eid) AND connection_id=(SELECT connection_id FROM cid) \
+                    AND permission = CAST(perms.p AS guacamole_object_permission_type) \
+                );"

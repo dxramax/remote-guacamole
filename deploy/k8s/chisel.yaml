@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: chisel-auth
+  namespace: remote-access
+type: Opaque
+stringData:
+  username: guac
+  password: change_me_chisel
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chisel-server
+  namespace: remote-access
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chisel-server
+  template:
+    metadata:
+      labels:
+        app: chisel-server
+    spec:
+      containers:
+        - name: chisel
+          image: jpillora/chisel:1.9.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - server
+            - --reverse
+            - --auth
+            - $(CHISEL_USER):$(CHISEL_PASS)
+            - --keepalive
+            - 30s
+          env:
+            - name: CHISEL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: chisel-auth
+                  key: username
+            - name: CHISEL_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: chisel-auth
+                  key: password
+          ports:
+            - name: http
+              containerPort: 8080
+            # Reverse port 13389 will be opened dynamically by chisel; no need to declare
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chisel-server
+  namespace: remote-access
+spec:
+  selector:
+    app: chisel-server
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chisel-rdp
+  namespace: remote-access
+spec:
+  selector:
+    app: chisel-server
+  ports:
+    - name: rdp
+      port: 13389
+      targetPort: 13389
+      protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: chisel-server
+  namespace: remote-access
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: remote.alfaclouds.com
+      http:
+        paths:
+          - path: /chisel
+            pathType: Prefix
+            backend:
+              service:
+                name: chisel-server
+                port:
+                  number: 8080
+
