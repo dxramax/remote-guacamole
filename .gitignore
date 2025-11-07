@@ -19,3 +19,5 @@ __pycache__/
 *.class
 *.pyc
 *.pyo
+.claude/
+secrets/
