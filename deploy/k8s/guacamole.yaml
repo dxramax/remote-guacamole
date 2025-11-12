@@ -13,6 +13,16 @@ spec:
       labels:
         app: guacamole
     spec:
+      initContainers:
+        - name: build-guac-mobile-ime
+          image: eclipse-temurin:17-jdk-jammy
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-lc", "set -e; mkdir -p /build/js; cp /src/guac-manifest.json /build/guac-manifest.json; cp /src/js/auto-ime.js /build/js/auto-ime.js; jar cf /out/guac-mobile-ime.jar -C /build .; ls -la /out"]
+          volumeMounts:
+            - name: guac-mobile-ime-src
+              mountPath: /src
+            - name: guac-extensions
+              mountPath: /out
       containers:
         - name: guacamole
           image: guacamole/guacamole:1.5.5
@@ -44,6 +54,20 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+          volumeMounts:
+            - name: guac-extensions
+              mountPath: /etc/guacamole/extensions
+      volumes:
+        - name: guac-extensions
+          emptyDir: {}
+        - name: guac-mobile-ime-src
+          configMap:
+            name: guac-mobile-ime
+            items:
+              - key: guac-manifest.json
+                path: guac-manifest.json
+              - key: auto-ime.js
+                path: js/auto-ime.js
 ---
 apiVersion: v1
 kind: Service

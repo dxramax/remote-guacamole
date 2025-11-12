@@ -1,0 +1,69 @@
+/*
+ * Auto-enable Guacamole Text Input (IME) on mobile.
+ *
+ * This lightweight extension detects mobile browsers and, on the first
+ * user gesture, enables Guacamole's text input so the OS soft keyboard
+ * becomes available. It then attempts to focus the input field.
+ *
+ * Note: Uses best-effort DOM hooks to toggle the setting. Guacamole's
+ * Angular internals may change between versions; in that case the
+ * selectors below might need to be refreshed.
+ */
+(function () {
+  'use strict';
+
+  /* global angular */
+  if (typeof angular === 'undefined') return;
+
+  try {
+    angular
+      .module('guacMobileIme', ['client'])
+      .run(['$document', '$timeout', function ($document, $timeout) {
+        var doc = $document[0];
+        var isMobile = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|Mobile/i.test(navigator.userAgent);
+        if (!isMobile) return;
+
+        var activated = false;
+
+        function tryToggleAndFocus() {
+          // Try to toggle the Text input switch if present and off
+          var toggle = doc.querySelector('.text-input input[type="checkbox"], .preference-text-input input[type="checkbox"], input#text-input-toggle');
+          if (toggle && !toggle.checked) {
+            toggle.click();
+          }
+
+          // Focus the IME textarea if present
+          var ta = doc.querySelector('.guac-text-input textarea, .text-input textarea, textarea.guac-input');
+          if (ta) {
+            ta.focus();
+            ta.click();
+          }
+        }
+
+        function enableImeOnce() {
+          if (activated) return;
+          activated = true;
+
+          var attempts = 0;
+          (function loop() {
+            attempts++;
+            tryToggleAndFocus();
+            if (attempts < 30) $timeout(loop, 200);
+          })();
+        }
+
+        function once() {
+          enableImeOnce();
+          doc.removeEventListener('touchend', once, true);
+          doc.removeEventListener('click', once, true);
+        }
+
+        // After first user gesture, enable IME and focus
+        doc.addEventListener('touchend', once, true);
+        doc.addEventListener('click', once, true);
+      }]);
+  } catch (e) {
+    // Silently ignore – extension should never break the UI
+  }
+})();
+

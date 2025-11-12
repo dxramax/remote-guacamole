@@ -1,0 +1,12 @@
+{
+  "guac-manifest": {
+    "name": "Mobile IME Auto Toggle",
+    "namespace": "guac-mobile-ime",
+    "version": "1.0.0",
+    "js": [
+      "js/auto-ime.js"
+    ],
+    "translations": []
+  }
+}
+
