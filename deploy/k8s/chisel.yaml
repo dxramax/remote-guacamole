@@ -6,7 +6,8 @@ metadata:
 type: Opaque
 stringData:
   username: guac
-  password: REDACTED
+  # IMPORTANT: Change this password before deploying!
+  password: CHANGE_THIS_PASSWORD
 ---
 apiVersion: apps/v1
 kind: Deployment

@@ -36,6 +36,6 @@ cat <<'CMD'
 $dir = 'C:\ProgramData\chisel'; New-Item -ItemType Directory -Force -Path $dir | Out-Null
 Invoke-WebRequest -UseBasicParsing -Uri https://github.com/jpillora/chisel/releases/download/v1.9.1/chisel_1.9.1_windows_amd64.gz -OutFile $dir\chisel.gz
 certutil -f -decode $dir\chisel.gz $dir\chisel.exe | Out-Null
-& "$dir\chisel.exe" client --keepalive 30s --auth guac:REDACTED wss://remote.alfaclouds.com/chisel R:13389:127.0.0.1:3389
+& "$dir\chisel.exe" client --keepalive 30s --auth guac:\$CHISEL_PASSWORD wss://remote.alfaclouds.com/chisel R:13389:127.0.0.1:3389
 CMD
 

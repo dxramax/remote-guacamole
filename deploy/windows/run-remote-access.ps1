@@ -1,6 +1,6 @@
 param(
   [Parameter()] [string] $ServerUrl = 'wss://remote.alfaclouds.com/chisel',
-  [Parameter()] [string] $Auth = 'guac:REDACTED',
+  [Parameter(Mandatory=$true)] [string] $Auth,  # Format: username:password
   [Parameter()] [int] $RemotePort = 13389,
   [Parameter()] [switch] $Persist
 )
